@@ -1,0 +1,14 @@
+glob:bin/**
+glob:binnppColdFusion.pdb
+glob:vcbuild/Unicode**/**
+glob:vcbuild/ANSI**/**
+glob:**.orig
+glob:**-preSC.cpp
+glob:vcbuild/**.ncb
+glob:src/nppColdFusionComment.*
+glob:vcbuild/vcbuild.vcproj.VIRTUALXP.Ben.user
+glob:vcbuild/nppColdFusionPlugin.vs2010.suo
+syntax: glob
+vcbuild/vcbuild.vcxproj.user
+**/ipch/**
+**/*.sdf
