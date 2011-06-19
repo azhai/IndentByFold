@@ -81,6 +81,67 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 		case SCN_AUTOCSELECTION:
 			break;
 		case SCN_MODIFIED:
+			if ( notifyCode->modificationType & SC_MOD_CHANGEFOLD ) {
+				int foldlevelNowMask = notifyCode->foldLevelNow;
+				bool foldlevelnowishead = false;
+				if ( foldlevelNowMask & SC_FOLDLEVELWHITEFLAG ) {
+					foldlevelNowMask = foldlevelNowMask &~SC_FOLDLEVELWHITEFLAG;
+				}
+				if ( foldlevelNowMask & SC_FOLDLEVELHEADERFLAG ) {
+					foldlevelnowishead = true;
+					foldlevelNowMask = foldlevelNowMask &~SC_FOLDLEVELHEADERFLAG;
+				}
+				int foldlevelNowMask2 = foldlevelNowMask & SC_FOLDLEVELNUMBERMASK ;
+
+				int foldlevelPrevMask = notifyCode->foldLevelPrev;
+				if ( foldlevelPrevMask & SC_FOLDLEVELWHITEFLAG ) {
+					foldlevelPrevMask = foldlevelPrevMask &~SC_FOLDLEVELWHITEFLAG;
+				}
+				if ( foldlevelPrevMask & SC_FOLDLEVELHEADERFLAG ) {
+					foldlevelPrevMask = foldlevelPrevMask &~SC_FOLDLEVELHEADERFLAG;
+				}
+				int foldlevelPrevMask2 = foldlevelPrevMask  & SC_FOLDLEVELNUMBERMASK;
+				bool shifted = false;
+				if (foldlevelNowMask2 == foldlevelPrevMask2 && foldlevelNowMask != foldlevelPrevMask) {
+					shifted = true;
+					foldlevelNowMask = ( notifyCode->foldLevelNow >> 16);
+					foldlevelPrevMask = ( notifyCode->foldLevelPrev >> 16);
+				} else {
+					foldlevelNowMask = foldlevelNowMask2;
+					foldlevelPrevMask = foldlevelPrevMask2;
+				}
+				
+				if ( foldlevelNowMask < foldlevelPrevMask ) {
+					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
+					int curline =  sciMsgr.getLineFromPos(sciMsgr.getCurrentPos());
+					if ( curline == notifyCode->line ) {
+						int foldparentline = sciMsgr.getFoldParent( notifyCode->line );
+						toggleDownUpLine = -1;
+						if (foldlevelnowishead) {
+							foldparentline = sciMsgr.getFoldParent( notifyCode->line -1 );
+						}
+						int foldlevelparent = sciMsgr.getFoldLevel( foldparentline );
+					
+						if ( shifted ) {
+							foldlevelparent = foldlevelparent >> 16;
+						} else {
+							foldlevelparent = foldlevelparent & SC_FOLDLEVELNUMBERMASK;
+						}
+						// The or here is for nppCF with cfelse/cfelseif
+						if ( foldlevelparent == foldlevelPrevMask || ( foldlevelNowMask == foldlevelparent && foldlevelnowishead ) ) {
+							int indent = sciMsgr.getLineIndentation( foldparentline );
+							sciMsgr.setLineIndentation( notifyCode->line, indent );
+							lastFoldDownLine = curline;
+						}
+					}
+				} else if ( lastFoldDownLine > -1 && foldlevelNowMask > foldlevelPrevMask ) {
+					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
+					int curline =  sciMsgr.getLineFromPos(sciMsgr.getCurrentPos());
+					if ( curline == lastFoldDownLine ) {
+						toggleDownUpLine = curline;
+					}
+				}
+			}
 			break;
 		default:
 			break;
@@ -115,9 +176,6 @@ void IBFPlugin::OnSciCharAdded( int ch )
 	// lets see if we can find one
 	int currentpos = sciMsgr.getCurrentPos();
 	int line = sciMsgr.getLineFromPos( currentpos );
-	//int pos = sciMsgr.getCaretInLine();
-	//int state = sciMsgr.getLineState( line -1 );
-	//int wordstart = sciMsgr.SendSciMsg( SCI_WORDSTARTPOSITION,( WPARAM )currentpos, ( LPARAM ) true );
 	int eol = sciMsgr.getEOLMode();
 	if ( ch == '\n' || (eol == SC_EOL_CR && ch == '\r' ) ) {
 		indentLine( line, false );
@@ -144,32 +202,25 @@ void IBFPlugin::indentLine( int line, bool doingwholefile )
 	int foldlevellast = foldlevellastline & SC_FOLDLEVELNUMBERMASK;
 	int foldlevelcurline = sciMsgr.getFoldLevel( line );
 	int foldlevel = foldlevelcurline & SC_FOLDLEVELNUMBERMASK;
+
 	bool islastlinefoldparent = ( foldlevellastline & SC_FOLDLEVELHEADERFLAG) ? true : false;
 	int lastlinelength = sciMsgr.getLineEndPos( line - 1 ) -  sciMsgr.getPosFromLine( line -1 );
 	int lastlineindent = sciMsgr.getLineIndentation( line -1 ) / getwidth;
-
+	if ( !islastlinefoldparent && toggleDownUpLine == line -1 ) {
+		islastlinefoldparent = true;
+	}
 	// If the Fold Parent is the line above the new line then we indent
 	if ( islastlinefoldparent && foldparentline != line && lastlinelength > lastlineindent ) {
 		int indent = sciMsgr.getLineIndentation( foldparentline );
 		sciMsgr.setLineIndentation( line, indent + getwidth );
+	} else if ( doingwholefile && foldlevellast > foldlevel ) {
+		int foldparentline = sciMsgr.getFoldParent( line -1 );
+		int indent = sciMsgr.getLineIndentation( foldparentline );
+		sciMsgr.setLineIndentation( line -1, indent );
+		sciMsgr.setLineIndentation( line, indent );
 	} else {
-		
-		int foldlevelprevtmp = sciMsgr.getFoldLevel( line -2 );
-		int foldlevelprev = foldlevelprevtmp & SC_FOLDLEVELNUMBERMASK;
-		bool isprevlinefoldparent = ( foldlevelprevtmp & SC_FOLDLEVELHEADERFLAG ) ? true : false;
-		if ( isprevlinefoldparent && foldlevel == foldlevelprev && foldlevel != foldlevellast ) {
-			int indent = sciMsgr.getLineIndentation( line -2 );
-			sciMsgr.setLineIndentation( line -1, indent );
-			sciMsgr.setLineIndentation( line, indent );
-		} else if ( !isprevlinefoldparent && foldlevel < foldlevelprev && foldlevel != foldlevellast ) {
-			int foldparentline = sciMsgr.getFoldParent( line -1 );
-			int indent = sciMsgr.getLineIndentation( foldparentline );
-			sciMsgr.setLineIndentation( line -1, indent );
-			sciMsgr.setLineIndentation( line, indent );
-		} else {
-			int indent = sciMsgr.getLineIndentation( line -1 );
-			sciMsgr.setLineIndentation( line, indent );
-		}
+		int indent = sciMsgr.getLineIndentation( line -1 );
+		sciMsgr.setLineIndentation( line, indent );
 	}
 }
 
@@ -178,6 +229,8 @@ void IBFPlugin::OnNppSetInfo( const NppData& notpadPlusData )
 {
 	m_nppMsgr.setNppData( notpadPlusData );
 	isNppWndUnicode = ::IsWindowUnicode( notpadPlusData._nppHandle ) ? true : false;
+	lastFoldDownLine = -1;
+	toggleDownUpLine = -1;
 	
 
 }

@@ -40,7 +40,8 @@ protected:
 	int  m_nAutoRightBracketPos;
 	int  m_nFileType;
 	bool m_bSupportedFileType;
-
+	int lastFoldDownLine;
+	int toggleDownUpLine;
 public:
 	IBFPlugin();
 	virtual ~IBFPlugin();
