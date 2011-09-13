@@ -1,8 +1,12 @@
 #include "SciMessager.h"
 
+
 CSciMessager::CSciMessager( HWND hSciWnd )
 {
 	m_hSciWnd = hSciWnd;
+	pSciMsg = (SciFnDirect)SendMessage(m_hSciWnd,SCI_GETDIRECTFUNCTION, 0, 0);
+
+	pSciWndData = (sptr_t)SendMessage(m_hSciWnd,SCI_GETDIRECTPOINTER, 0, 0); 
 }
 
 CSciMessager::~CSciMessager()
@@ -11,12 +15,14 @@ CSciMessager::~CSciMessager()
 
 LRESULT CSciMessager::SendSciMsg( UINT uMsg, WPARAM wParam , LPARAM lParam )
 {
-	return ::SendMessage( m_hSciWnd, uMsg, wParam, lParam );
+	//return ::SendMessage( m_hSciWnd, uMsg, wParam, lParam );
+	return pSciMsg(pSciWndData, uMsg, wParam, lParam);
 }
 
 LRESULT CSciMessager::SendSciMsg( UINT uMsg, WPARAM wParam , LPARAM lParam ) const
 {
-	return ::SendMessage( m_hSciWnd, uMsg, wParam, lParam );
+	//return ::SendMessage( m_hSciWnd, uMsg, wParam, lParam );
+	return pSciMsg(pSciWndData, uMsg, wParam, lParam);
 }
 
 void CSciMessager::beginUndoAction()

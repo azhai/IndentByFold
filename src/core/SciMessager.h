@@ -8,6 +8,8 @@ class CSciMessager
 {
 protected:
 	HWND m_hSciWnd;
+	SciFnDirect pSciMsg;
+	sptr_t pSciWndData; 
 
 public:
 	CSciMessager( HWND hSciWnd = NULL );
