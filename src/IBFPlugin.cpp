@@ -52,11 +52,27 @@ const TCHAR* IBFPlugin::nppGetName()
 	return 0;
 }
 
+void IBFPlugin::OnLangChanged( uptr_t idFrom ) 
+{
+	LangType langType = L_TEXT;
+	useNextLine = false;
+	m_nppMsgr.SendNppMsg( NPPM_GETCURRENTLANGTYPE, (WPARAM) 0, (LPARAM) & langType );
+	if ( langType == L_RUBY || langType == L_HTML || langType == L_LISP || langType == L_LUA  || langType == L_PASCAL || langType == L_XML ) {
+		useNextLine = true;
+	}
+}
 void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 {
 	if ( notifyCode->nmhdr.hwndFrom == m_nppMsgr.getNppWnd() ) {
 		// >>> notifications from Notepad++
 		switch ( notifyCode->nmhdr.code ) {
+		case NPPN_BUFFERACTIVATED:
+		case NPPN_FILESAVED:
+		case NPPN_LANGCHANGED:
+			OnLangChanged( notifyCode->nmhdr.idFrom );
+			break;
+
+
 		case NPPN_READY:
 			OnNppReady();
 			break;
@@ -114,11 +130,16 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 				if ( foldlevelNowMask < foldlevelPrevMask ) {
 					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
 					int curline =  sciMsgr.getLineFromPos(sciMsgr.getCurrentPos());
-					if ( curline == notifyCode->line ) {
-						int foldparentline = sciMsgr.getFoldParent( notifyCode->line );
+					if ( curline == notifyCode->line || ( useNextLine && curline == notifyCode->line - 1 ) ) {
+						int actualline = notifyCode->line;
+						if ( curline == notifyCode->line - 1) {
+							actualline--;
+						}
+						
+						int foldparentline = sciMsgr.getFoldParent( actualline );
 						toggleDownUpLine = -1;
 						if (foldlevelnowishead) {
-							foldparentline = sciMsgr.getFoldParent( notifyCode->line -1 );
+							foldparentline = sciMsgr.getFoldParent( actualline -1 );
 						}
 						int foldlevelparent = sciMsgr.getFoldLevel( foldparentline );
 					
@@ -128,12 +149,22 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 							foldlevelparent = foldlevelparent & SC_FOLDLEVELNUMBERMASK;
 						}
 						// The or here is for nppCF with cfelse/cfelseif
-						if ( foldlevelparent == foldlevelPrevMask || ( foldlevelNowMask == foldlevelparent && foldlevelnowishead ) ) {
+						if (	foldlevelparent == foldlevelPrevMask || 
+								( foldlevelNowMask == foldlevelparent && foldlevelnowishead ) ||
+								( actualline == notifyCode->line -1 && foldlevelparent == foldlevelPrevMask -1 )
+								) {
 							int indent = sciMsgr.getLineIndentation( foldparentline );
-							sciMsgr.setLineIndentation( notifyCode->line, indent );
+							sciMsgr.setLineIndentation( actualline, indent );
 							lastFoldDownLine = curline;
 						}
 					}
+				} else if ( isNewLine == true && newLine == notifyCode->line ) {
+					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
+					isNewLine = false;
+					newLine = -1;
+					indentLine( notifyCode->line, false );
+					int indentpos = sciMsgr.getLineIndentPosition( notifyCode->line );
+					sciMsgr.goToPos( indentpos );
 				} else if ( lastFoldDownLine > -1 && foldlevelNowMask > foldlevelPrevMask ) {
 					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
 					int curline =  sciMsgr.getLineFromPos(sciMsgr.getCurrentPos());
@@ -179,8 +210,15 @@ void IBFPlugin::OnSciCharAdded( int ch )
 	int eol = sciMsgr.getEOLMode();
 	if ( ch == '\n' || (eol == SC_EOL_CR && ch == '\r' ) ) {
 		indentLine( line, false );
+		isNewLine = true;
+		newLine = line;
 		int indentpos = sciMsgr.getLineIndentPosition( line );
 		sciMsgr.goToPos( indentpos );
+		
+	} else {
+		isNewLine = false;
+		newLine = -1;
+	
 	}
 
 }
@@ -231,7 +269,8 @@ void IBFPlugin::OnNppSetInfo( const NppData& notpadPlusData )
 	isNppWndUnicode = ::IsWindowUnicode( notpadPlusData._nppHandle ) ? true : false;
 	lastFoldDownLine = -1;
 	toggleDownUpLine = -1;
-	
+	newLine = -1;
+	isNewLine = false;
 
 }
 void IBFPlugin::aboutDlg()

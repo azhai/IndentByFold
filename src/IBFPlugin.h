@@ -40,8 +40,11 @@ protected:
 	int  m_nAutoRightBracketPos;
 	int  m_nFileType;
 	bool m_bSupportedFileType;
+	bool isNewLine;
+	int newLine;
 	int lastFoldDownLine;
 	int toggleDownUpLine;
+	bool useNextLine;
 public:
 	IBFPlugin();
 	virtual ~IBFPlugin();
@@ -58,6 +61,7 @@ public:
 	void OnNppBufferActivated();
 	void OnNppFileOpened();
 	void OnNppFileSaved();
+	void OnLangChanged( uptr_t idFrom );
 	void OnNppReady();
 	void OnNppShutdown();
 	// custom scintilla notifications
