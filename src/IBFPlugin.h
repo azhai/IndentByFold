@@ -33,6 +33,15 @@ public:
 	};
 
 	static const TCHAR* PLUGIN_NAME;
+private:
+	
+	bool decrementAfterAutoC;
+	bool decrementAfterPaint;
+	int linetodecrement;
+	int indentationtouse;
+	int foldleveltomatch;
+	int postoblame;
+	LangType langType;
 protected:
 	// plugin menu
 	//CXBracketsMenu m_PluginMenu;

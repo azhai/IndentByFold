@@ -54,7 +54,7 @@ const TCHAR* IBFPlugin::nppGetName()
 
 void IBFPlugin::OnLangChanged( uptr_t idFrom ) 
 {
-	LangType langType = L_TEXT;
+	
 	useNextLine = false;
 	m_nppMsgr.SendNppMsg( NPPM_GETCURRENTLANGTYPE, (WPARAM) 0, (LPARAM) & langType );
 	if ( langType == L_RUBY || langType == L_HTML || langType == L_LISP || langType == L_LUA  || langType == L_PASCAL || langType == L_XML ) {
@@ -85,6 +85,7 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 		
 		// <<< notifications from Notepad++
 	} else {
+		bool autocselection = false;
 		// >>> notifications from Scintilla
 		switch ( notifyCode->nmhdr.code ) {
 		case SCN_UPDATEUI:
@@ -92,12 +93,37 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 		case SCN_CHARADDED:
 			OnSciCharAdded( notifyCode->ch );
 			break;
-		case SCN_AUTOCCANCELLED:
-			break;
 		case SCN_AUTOCSELECTION:
+			autocselection = true;
+		case SCN_PAINTED:
+		case SCN_AUTOCCANCELLED:
+		
+			if ( ( notifyCode->nmhdr.code != SCN_PAINTED && decrementAfterAutoC ) || (notifyCode->nmhdr.code == SCN_PAINTED && decrementAfterPaint ) ) {
+				if ( decrementAfterPaint ) decrementAfterPaint = false;
+				else decrementAfterAutoC = false;
+				
+				CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
+				int curpos = sciMsgr.getCurrentPos();
+				int curline = sciMsgr.getLineFromPos(curpos);
+				int curFold = sciMsgr.getFoldLevel( curline + 1 );
+				if ( postoblame == curpos && ( curFold == foldleveltomatch || notifyCode->nmhdr.code == SCN_PAINTED )  ) {
+
+					// Only interested in this if we are completing on the actual text
+					if ( autocselection && postoblame == notifyCode->position + strlen( notifyCode->text ) ) {
+						sciMsgr.SendSciMsg( SCI_AUTOCCANCEL );
+						sciMsgr.setLineIndentation( curline, indentationtouse );
+						lastFoldDownLine = curline;
+					}  else if ( !autocselection ) {
+						sciMsgr.setLineIndentation( curline, indentationtouse );
+						lastFoldDownLine = curline;
+					}
+				}
+				
+			}
 			break;
 		case SCN_MODIFIED:
 			if ( notifyCode->modificationType & SC_MOD_CHANGEFOLD ) {
+				
 				int foldlevelNowMask = notifyCode->foldLevelNow;
 				bool foldlevelnowishead = false;
 				if ( foldlevelNowMask & SC_FOLDLEVELWHITEFLAG ) {
@@ -154,18 +180,37 @@ void IBFPlugin::nppBeNotified( SCNotification* notifyCode )
 								( actualline == notifyCode->line -1 && foldlevelparent == foldlevelPrevMask -1 )
 								) {
 							int indent = sciMsgr.getLineIndentation( foldparentline );
+							if ( sciMsgr.isAutoCActive() ) {
+								// store it 
+								foldleveltomatch = notifyCode->foldLevelNow;
+
+								decrementAfterAutoC = true;
+								linetodecrement = actualline;
+								postoblame = sciMsgr.getCurrentPos();
+								indentationtouse = indent;
+							} else {
+								if ( langType == L_HTML ) {
+									// Hacky for HTML
+									decrementAfterPaint = true;
+									linetodecrement = actualline;
+									postoblame = sciMsgr.getCurrentPos();
+									indentationtouse = indent;
+								} else {
 							sciMsgr.setLineIndentation( actualline, indent );
 							lastFoldDownLine = curline;
 						}
+								
 					}
-				} else if ( isNewLine == true && newLine == notifyCode->line ) {
+						}
+					}
+				} else if ( isNewLine == true && newLine == notifyCode->line && foldlevelNowMask > foldlevelPrevMask ) {
 					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
 					isNewLine = false;
 					newLine = -1;
 					indentLine( notifyCode->line, false );
 					int indentpos = sciMsgr.getLineIndentPosition( notifyCode->line );
 					sciMsgr.goToPos( indentpos );
-				} else if ( lastFoldDownLine > -1 && foldlevelNowMask > foldlevelPrevMask ) {
+				} else if ( !useNextLine && lastFoldDownLine > -1 && foldlevelNowMask > foldlevelPrevMask ) {
 					CSciMessager sciMsgr( m_nppMsgr.getCurrentScintillaWnd() );
 					int curline =  sciMsgr.getLineFromPos(sciMsgr.getCurrentPos());
 					if ( curline == lastFoldDownLine ) {
@@ -271,7 +316,10 @@ void IBFPlugin::OnNppSetInfo( const NppData& notpadPlusData )
 	toggleDownUpLine = -1;
 	newLine = -1;
 	isNewLine = false;
-
+	decrementAfterAutoC = false;
+	decrementAfterPaint = false;
+	postoblame = 0;
+	langType = L_TEXT;
 }
 void IBFPlugin::aboutDlg()
 {
