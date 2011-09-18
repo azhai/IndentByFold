@@ -326,7 +326,7 @@ void IBFPlugin::aboutDlg()
 	::MessageBox( m_nppMsgr.getNppWnd(),
 	              TEXT( "IndentByFold by Ben Bluemel\n" )
 	              TEXT( "http://bitbucket.org/bbluemel/indentbyfold/\n\n" ),
-	              TEXT( "IndentByFold v0.6" ),
+	              TEXT( "IndentByFold v0.7" ),
 	              MB_OK );
 				  
 }
